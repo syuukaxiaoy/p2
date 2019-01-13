@@ -14,6 +14,7 @@ import os
 
 def args_paser():
     paser = argparse.ArgumentParser(description='trainer file')
+    
     paser.add_argument('--data_dir', type=str, default='flowers', help='dataset directory')
     paser.add_argument('--gpu', type=bool, default='True', help='True: gpu, False: cpu')
     paser.add_argument('--lr', type=float, default=0.001, help='learning rate')
@@ -50,8 +51,6 @@ def process_data(train_dir, test_dir, valid_dir):
     test_datasets = datasets.ImageFolder(test_dir, transform=test_transforms)
     valid_datasets = datasets.ImageFolder(valid_dir, transform=valid_transforms)
 
-
-
     trainloaders = torch.utils.data.DataLoader(train_datasets, batch_size=64, shuffle=True)
     testloaders = torch.utils.data.DataLoader(test_datasets, batch_size=64, shuffle=True)
     validloaders = torch.utils.data.DataLoader(valid_datasets, batch_size=64, shuffle=True)
@@ -61,15 +60,13 @@ def process_data(train_dir, test_dir, valid_dir):
 
 def basic_model(arch):
     # Load pretrained_network
-    if arch == None or arch == 'vgg':
+    if arch == None:
         load_model = models.vgg16(pretrained=True)
         #load_model.name = 'vgg16'
         print('Use vgg16')
     else:
-        exec("model = models.{}(pretrained=True)".format(arch))
-        #model.name = arch
-
-    # Freeze parameters
+        print('Please vgg16 or desnent only, defaulting to vgg16')
+        load_model = models.vgg16(pretrained=True)
     
     return load_model
 
@@ -88,16 +85,16 @@ def set_classifier(load_model, hidden_units):
                                                   ('output', nn.LogSoftmax(dim=1))
                                                   ]))
 
-    classifier = model.classifier
+    model.classifier = classifier
 
-    return classifier
+    return model
 
 
     print(f"Epoch {epoch+1}/{epochs}.. "
-          f"Train loss: {running_loss/print_every:.3f}.. ")
+        f"Train loss: {running_loss/print_every:.3f}.. ")
 
 
-def train_model(epochs, trainloaders, validloaders,gpu):
+def train_model(epochs, trainloaders, validloaders, gpu, model, optimizer, criterion):
     if type(epochs) == type(None):
         epochs = 10
         print("Epochs = 10")
@@ -106,7 +103,7 @@ def train_model(epochs, trainloaders, validloaders,gpu):
     model.to('cuda')
 
     running_loss = 0
-    print_every = 30
+    print_every = 60
     for epoch in range(epochs):
         for inputs, labels in trainloaders:
             steps += 1
@@ -128,10 +125,9 @@ def train_model(epochs, trainloaders, validloaders,gpu):
                 model.eval()
                 with torch.no_grad():
                     for inputs, labels in validloaders:
-                        inputs, labels = inputs.to(device), labels.to(device)
+                        inputs, labels = inputs.to('cuda'), labels.to('cuda')
                         logps = model.forward(inputs)
                         batch_loss = criterion(logps, labels)
-
                         test_loss += batch_loss.item()
 
                         # Calculate accuracy
@@ -140,12 +136,12 @@ def train_model(epochs, trainloaders, validloaders,gpu):
                         equals = top_class == labels.view(*top_class.shape)
                         accuracy += torch.mean(equals.type(torch.FloatTensor)).item()
 
-            print(f"Epoch {epoch+1}/{epochs}.. "
-                  f"Train loss: {running_loss/print_every:.3f}.. "
-                  f"Valid loss: {test_loss/len(validloaders):.3f}.."
-                  f"Valid accuracy: {accuracy/len(validloaders):.3f}")
-            running_loss = 0
-            model.train()
+                        print(f"Epoch {epoch+1}/{epochs}.. "
+                            f"Train loss: {running_loss/print_every:.3f}.. "
+                            f"Valid loss: {test_loss/len(validloaders):.3f}.."
+                            f"Valid accuracy: {accuracy/len(validloaders):.3f}")
+                    running_loss = 0
+                model.train()
 
     return Model
 
@@ -173,9 +169,9 @@ def save_checkpoint(Model, train_datasets, save_dir):
     Model.class_to_idx = train_datasets.class_to_idx
 
     checkpoint = {'structure': Model.name,
-                  'classifier': Model.classifier,
-                  'state_dic': Model.state_dict(),
-                  'class_to_idx': Model.class_to_idx}
+             'classifier': Model.classifier,
+             'state_dic': Model.state_dict(),
+             'class_to_idx': Model.class_to_idx}
 
     return torch.save(checkpoint, save_dir)
 
@@ -188,19 +184,17 @@ def main():
     test_dir = data_dir + '/test'
 
     trainloaders, testloaders, validloaders = process_data(train_dir, test_dir, valid_dir)
-
     model = basic_model(args.arch)
     
     for param in model.parameters():
         param.requires_grad = False
         
-    classifier = set_classifier(model, args.hidden_units)
+    model = set_classifier(model, args.hidden_units)
     
     
     criterion = nn.NLLLoss()
     optimizer = optim.Adam(model.classifier.parameters(), lr=args.lr)
-
-    trmodel = train_model(args.epochs,trainloaders, validloaders, args.gpu)
+    trmodel = train_model(args.epochs,trainloaders, validloaders, args.gpu, model, optimizer, criterion)
 
     valid_model(trmodel, testloaders, args.gpu)
     save_checkpoint(trmodel, train_datasets, args.save_dir)
