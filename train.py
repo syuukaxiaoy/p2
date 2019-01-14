@@ -14,7 +14,7 @@ import os
 
 def args_paser():
     paser = argparse.ArgumentParser(description='trainer file')
-    
+
     paser.add_argument('--data_dir', type=str, default='flowers', help='dataset directory')
     paser.add_argument('--gpu', type=bool, default='True', help='True: gpu, False: cpu')
     paser.add_argument('--lr', type=float, default=0.001, help='learning rate')
@@ -62,20 +62,24 @@ def basic_model(arch):
     # Load pretrained_network
     if arch == None:
         load_model = models.vgg16(pretrained=True)
-        #load_model.name = 'vgg16'
+        # load_model.name = 'vgg16'
         print('Use vgg16')
     else:
         print('Please vgg16 or desnent only, defaulting to vgg16')
         load_model = models.vgg16(pretrained=True)
-    
+
+    for param in load_model.parameters():
+        param.requires_grad = False
+
     return load_model
+
 
 def set_classifier(load_model, hidden_units):
     if hidden_units == None:
         hidden_units = 512
 
     input = load_model.classifier[0].in_features
-    model.classifier = nn.Sequential(OrderedDict([('fc1', nn.Linear(input, hidden_units, bias=True)),
+    classifier = nn.Sequential(OrderedDict([('fc1', nn.Linear(input, hidden_units, bias=True)),
                                                   ('relu1', nn.ReLU()),
                                                   ('dropout', nn.Dropout(p=0.5)),
                                                   ('fc2', nn.Linear(hidden_units, 128, bias=True)),
@@ -85,29 +89,30 @@ def set_classifier(load_model, hidden_units):
                                                   ('output', nn.LogSoftmax(dim=1))
                                                   ]))
 
-    model.classifier = classifier
+    #load_model.classifier = classifier
 
-    return model
-
+    return classifier
 
     print(f"Epoch {epoch+1}/{epochs}.. "
-        f"Train loss: {running_loss/print_every:.3f}.. ")
+          f"Train loss: {running_loss/print_every:.3f}.. ")
 
 
-def train_model(epochs, trainloaders, validloaders, gpu, model, optimizer, criterion):
+def train_model(epochs, trainloaders, validloaders, gpu, Model, optimizer, criterion):
     if type(epochs) == type(None):
         epochs = 10
         print("Epochs = 10")
     steps = 0
 
-    model.to('cuda')
+    #Model.to('cuda')
 
-    running_loss = 0
     print_every = 60
+
     for epoch in range(epochs):
+        running_loss = 0
+        Model.train()
         for inputs, labels in trainloaders:
             steps += 1
-            if gpu==True:
+            if gpu == True:
                 inputs, labels = inputs.to('cuda'), labels.to('cuda')
 
             optimizer.zero_grad()
@@ -137,23 +142,24 @@ def train_model(epochs, trainloaders, validloaders, gpu, model, optimizer, crite
                         accuracy += torch.mean(equals.type(torch.FloatTensor)).item()
 
                         print(f"Epoch {epoch+1}/{epochs}.. "
-                            f"Train loss: {running_loss/print_every:.3f}.. "
-                            f"Valid loss: {test_loss/len(validloaders):.3f}.."
-                            f"Valid accuracy: {accuracy/len(validloaders):.3f}")
+                              f"Train loss: {running_loss/print_every:.3f}.. "
+                              f"Valid loss: {test_loss/len(validloaders):.3f}.."
+                              f"Valid accuracy: {accuracy/len(validloaders):.3f}")
                     running_loss = 0
                 model.train()
 
     return Model
 
+
 def valid_model(Model, testloaders, gpu):
     test_loss = 0
     accuracy = 0
-    model.eval()
+    Model.eval()
     with torch.no_grad():
         for inputs, labels in testloaders:
             if gpu == True:
                 inputs, labels = inputs.to('cuda'), labels.to('cuda')
-            logps = model.forward(inputs)
+            logps = Model.forward(inputs)
             batch_loss = criterion(logps, labels)
 
             test_loss += batch_loss.item()
@@ -164,16 +170,20 @@ def valid_model(Model, testloaders, gpu):
             equals = top_class == labels.view(*top_class.shape)
             accuracy += torch.mean(equals.type(torch.FloatTensor)).item()
 
-def save_checkpoint(Model, train_datasets, save_dir):
+    print(f"Valid loss: {test_loss/len(testloaders):.3f}.."
+          f"Valid accuracy: {accuracy/len(testloaders):.3f}")
 
+
+def save_checkpoint(Model, train_datasets, save_dir):
     Model.class_to_idx = train_datasets.class_to_idx
 
     checkpoint = {'structure': Model.name,
-             'classifier': Model.classifier,
-             'state_dic': Model.state_dict(),
-             'class_to_idx': Model.class_to_idx}
+                  'classifier': Model.classifier,
+                  'state_dic': Model.state_dict(),
+                  'class_to_idx': Model.class_to_idx}
 
     return torch.save(checkpoint, save_dir)
+
 
 def main():
     args = args_paser()
@@ -185,19 +195,18 @@ def main():
 
     trainloaders, testloaders, validloaders = process_data(train_dir, test_dir, valid_dir)
     model = basic_model(args.arch)
-    
-    for param in model.parameters():
-        param.requires_grad = False
-        
+
+
     model = set_classifier(model, args.hidden_units)
-    
-    
+
     criterion = nn.NLLLoss()
     optimizer = optim.Adam(model.classifier.parameters(), lr=args.lr)
-    trmodel = train_model(args.epochs,trainloaders, validloaders, args.gpu, model, optimizer, criterion)
+    trmodel = train_model(args.epochs, trainloaders, validloaders, args.gpu, model, optimizer, criterion)
+    print('Completed!')
 
     valid_model(trmodel, testloaders, args.gpu)
     save_checkpoint(trmodel, train_datasets, args.save_dir)
-    print('Completed!')
+
+
 
 if __name__ == '__main__': main()
