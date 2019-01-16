@@ -23,7 +23,7 @@ def args_paser():
 
 def load_checkpoint(check_path):
     checkpoint = torch.load(check_path)
-    model = getattr(models, checkpoint['structure'](pretrained=True))
+    model = getattr(models, checkpoint['structure'])(pretrained=True)
 
     for param in model.parameters():
         param.requires_grad = False
