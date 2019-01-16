@@ -31,7 +31,7 @@ def load_checkpoint(check_path):
 
     model.classifier = checkpoint['classifier']
     model.class_to_idx = checkpoint['class_to_idx']
-    model.load_state_dict(checkpoint['state_dict'])
+    model.load_state_dict(checkpoint['state_dic'])
 
     return model
 
