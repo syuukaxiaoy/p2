@@ -1,13 +1,14 @@
-import torch
 import argparse
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import torch
+from torch.autograd import Variable
 from torch import nn
 from torch import optim
 import torch.nn.functional as F
 from torchvision import datasets, transforms, models
 from PIL import Image
-import matplotlib.pyplot as plt
 import json
 import sys
 
@@ -35,11 +36,11 @@ def load_checkpoint(check_path):
 
     return model
 
-def process_image(image_path):
+def process_image(image):
     ''' Scales, crops, and normalizes a PIL image for a PyTorch model,
         returns an Numpy array
     '''
-    image = Image.open(image_path)
+    image = Image.open(image)
     w, h = image.size
 
     if w > h:
@@ -65,14 +66,15 @@ def process_image(image_path):
     return npimage
 
 
-def predict(image_path, model, device, topk):
+def predict(image_path, model, device, cat_to_name, topk):
     ''' Predict the class (or classes) of an image using a trained deep learning model.
     '''
+    # TODO: Implement the code to predict the class from an image file
 
     model.to(device)
     model.eval()
 
-    torch_img = torch.from_numpy(np.expand_dims(process_image(image_path), axis=0)).type(torch.FloatTensor).to("cpu")
+    torch_img = torch.from_numpy(np.expand_dims(process_image(image_path), axis=0)).type(torch.FloatTensor).to(device)
     output = torch.exp(model.forward(torch_img))
     probs, classes = output.topk(topk)
 
@@ -107,7 +109,7 @@ def main():
         
     model = load_checkpoint(args.checkpoint)
     np_image = process_image(args.img)
-    topk_pro, topk_cl, topk_la= predict(args.img, model, device, args.top_k)
+    topk_pro, topk_cl, topk_la= predict(args.img, model, device, cat_to_name, args.top_k)
     
     print('Predicted top classes : ', topk_cl)
     print('Flowers: ', topk_la)
