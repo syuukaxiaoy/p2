@@ -35,11 +35,11 @@ def load_checkpoint(check_path):
 
     return model
 
-def process_image(image):
+def process_image(image_path):
     ''' Scales, crops, and normalizes a PIL image for a PyTorch model,
         returns an Numpy array
     '''
-    image = Image.open(image)
+    image = Image.open(image_path)
     w, h = image.size
 
     if w > h:
